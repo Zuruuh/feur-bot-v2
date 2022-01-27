@@ -2,28 +2,8 @@ import { Client, Intents, Message, User } from "discord.js";
 import { config } from "dotenv";
 import { readFile, writeFile } from "fs/promises";
 import { join, resolve } from "path";
-
-const WORDS_REACTIONS: Word[] = [
-  {
-    word: "quoi",
-    response: "https://tenor.com/view/feur-quoi-clip-gif-21195505",
-  },
-  {
-    word: "oui",
-    response:
-      "https://tenor.com/view/stiti-oui-ouistiti-feur-best-joke-gif-22012916",
-  },
-  {
-    word: "moi",
-    response:
-      "https://media.discordapp.net/attachments/565193871265628213/930557511466110996/-_Tu_veux_sortir_avec_moi_.gif",
-  },
-];
-
-interface Word {
-  word: string;
-  response: string;
-}
+import { words } from "./words";
+import type { Word } from "./types";
 
 config();
 async function main(): Promise<void> {
@@ -32,14 +12,13 @@ async function main(): Promise<void> {
   });
 
   bot.on("messageCreate", async (message: Message) => {
-    const { content, author } = message;
-
-    WORDS_REACTIONS.forEach(async ({ word, response }: Word) => {
-      const formatted = content.replace(/\W*/gi, "");
-      const wordRegex = new RegExp(`${word}$`, "gi");
-      if (formatted.toLowerCase().match(wordRegex)) {
-        message.reply(response);
-        await feured(author);
+    words.forEach(async ({ word, response }: Word) => {
+      if (typeof word === "object") {
+        word.forEach(async (subWord: string) => {
+          return await reply(message, subWord, response);
+        });
+      } else if (typeof word === "string") {
+        await reply(message, word, response);
       }
     });
   });
@@ -47,8 +26,35 @@ async function main(): Promise<void> {
   bot.login(process.env.BOT_TOKEN);
 }
 
+async function reply(
+  message: Message,
+  word: string,
+  responses: string | string[]
+): Promise<void> {
+  const { content, author } = message;
+  const formatted = content.replace(/\W*/gi, "");
+  const wordRegex = new RegExp(`${word}$`, "gi");
+  if (formatted.toLowerCase().match(wordRegex)) {
+    let response: string = "";
+    if (typeof responses === "object") {
+      response = responses[Math.floor(Math.random() * responses.length)];
+    } else if (typeof responses === "string") {
+      response = responses;
+    }
+
+    message.reply(response);
+    await feured(author);
+  }
+}
+
 async function feured(author: User): Promise<void> {
   const path = resolve(join(__dirname, "..", "feured.json"));
+
+  try {
+    await readFile(path);
+  } catch (err: unknown) {
+    await writeFile(path, "{}");
+  }
   const currentState = (await readFile(path)).toString();
 
   const jsonState = JSON.parse(currentState);
